@@ -4,9 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { MenuIcon, TrophyIcon, ShieldIcon, SwordIcon, StarIcon, CloseIcon } from "../ui/icons";
 import { Button } from "../ui/Button";
+import { useAuth } from "@/lib/auth";
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const { user, loginWithGoogle, logout } = useAuth();
 
   const navLinks = [
     { name: "Brawlers", href: "/brawlers", icon: <SwordIcon size={16} /> },
@@ -48,12 +50,33 @@ export const Navbar = () => {
 
           {/* User Call-to-action */}
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost" size="sm" isSkewed={true}>
-              Sign In
-            </Button>
-            <Button variant="primary" size="sm" isSkewed={true}>
-              Join Platform
-            </Button>
+            {user ? (
+              <div className="flex items-center gap-4">
+                <Link href="/profile" className="flex items-center gap-2 group/avatar">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="h-10 w-10 rounded-full border border-brawl-yellow/40 group-hover/avatar:border-brawl-yellow transition-all"
+                  />
+                  <span className="hidden lg:block text-sm font-heading font-extrabold text-white group-hover/avatar:text-brawl-yellow transition-all uppercase">
+                    {user.name}
+                  </span>
+                </Link>
+                <Button variant="ghost" size="sm" isSkewed={true} onClick={logout}>
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" isSkewed={true} onClick={loginWithGoogle}>
+                  Sign In
+                </Button>
+                <Button variant="primary" size="sm" isSkewed={true} onClick={loginWithGoogle}>
+                  Join Platform
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -84,12 +107,62 @@ export const Navbar = () => {
               </Link>
             ))}
             <div className="flex flex-col gap-3 pt-6 border-t border-white/5">
-              <Button variant="ghost" size="md" isSkewed={false} className="w-full" onClick={() => setIsOpen(false)}>
-                Sign In
-              </Button>
-              <Button variant="primary" size="md" isSkewed={false} className="w-full" onClick={() => setIsOpen(false)}>
-                Join Platform
-              </Button>
+              {user ? (
+                <>
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-4 py-3 text-base font-heading font-extrabold text-gray-300 hover:text-brawl-yellow hover:bg-white/5 transition-all uppercase tracking-wider"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={user.avatarUrl}
+                      alt={user.name}
+                      className="h-8 w-8 rounded-full border border-brawl-yellow/40"
+                    />
+                    <span>My Dashboard</span>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    isSkewed={false}
+                    className="w-full text-rose-500 hover:text-rose-400"
+                    onClick={() => {
+                      logout();
+                      setIsOpen(false);
+                    }}
+                  >
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    isSkewed={false}
+                    className="w-full"
+                    onClick={() => {
+                      loginWithGoogle();
+                      setIsOpen(false);
+                    }}
+                  >
+                    Sign In
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    isSkewed={false}
+                    className="w-full"
+                    onClick={() => {
+                      loginWithGoogle();
+                      setIsOpen(false);
+                    }}
+                  >
+                    Join Platform
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

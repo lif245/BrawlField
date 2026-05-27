@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -261,6 +262,17 @@ export default function MapsListClient({ initialMaps }: MapsListClientProps) {
                             <span>Credits</span>
                             <span className="text-gray-400 truncate max-w-[100px]">{map.credit || "Supercell"}</span>
                           </div>
+
+                          <Link href={`/maps/${map.id}/plan/`} className="block w-full pt-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              isSkewed={true} 
+                              className="w-full text-[11px] py-1 border-brawl-yellow/10 hover:bg-brawl-yellow/10 hover:border-brawl-yellow/30 hover:text-brawl-yellow animate-pulse-glow"
+                            >
+                              Plan Strategy
+                            </Button>
+                          </Link>
                         </div>
                       </CardContent>
                     </Card>

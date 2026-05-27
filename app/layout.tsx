@@ -3,13 +3,14 @@ import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
+import { AuthProvider } from "@/lib/auth";
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
-});
-
+  });
+  
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
@@ -32,17 +33,20 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-dark-bg text-gray-100 selection:bg-brawl-purple selection:text-white">
-        {/* Navbar */}
-        <Navbar />
+        <AuthProvider>
+          {/* Navbar */}
+          <Navbar />
 
-        {/* Dynamic page contents wrapped in flex-1 */}
-        <div className="flex flex-1 w-full">
-          {children}
-        </div>
+          {/* Dynamic page contents wrapped in flex-1 */}
+          <div className="flex flex-1 w-full">
+            {children}
+          </div>
 
-        {/* Footer */}
-        <Footer />
+          {/* Footer */}
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );
 }
+
