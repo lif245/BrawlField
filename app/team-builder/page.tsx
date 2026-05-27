@@ -183,7 +183,7 @@ export default function TeamBuilderPage() {
 
     // Draw all completed lines
     canvasLines.forEach((line) => {
-      if (line.points.length < 2) return;
+      if (!line || !line.points || line.points.length < 2) return;
       ctx.beginPath();
       ctx.strokeStyle = line.color;
       ctx.lineWidth = line.width;

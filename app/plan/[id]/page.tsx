@@ -106,7 +106,7 @@ export default function SharedPlanPage() {
     // Draw lines
     const lines = plan?.canvas_data?.lines || [];
     lines.forEach((line) => {
-      if (line.points.length < 2) return;
+      if (!line || !line.points || line.points.length < 2) return;
       ctx.beginPath();
       ctx.strokeStyle = line.color;
       ctx.lineWidth = line.width;

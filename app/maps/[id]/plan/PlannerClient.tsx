@@ -153,7 +153,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     
     // Draw past actions
     const drawSingleAction = (act: DrawAction) => {
-      if (act.points.length < 1) return;
+      if (!act || !act.points || act.points.length < 1) return;
 
       ctx.strokeStyle = act.color;
       ctx.lineWidth = act.thickness;
