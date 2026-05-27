@@ -1,1 +1,50 @@
-"/**\n * BrawlAPI Map Types\n * Based on https://api.brawlapi.com/v1/maps\n */\n\n/** Map environment/theme */\nexport interface MapEnvironment {\n  id: number;\n  scId: number;\n  name: string;\n  hash: string;\n  path: string;\n  version: number;\n  imageUrl: string;\n}\n\n/** Game mode associated with a map */\nexport interface GameMode {\n  id: number;\n  scId: number;\n  name: string;\n  hash: string;\n  version: number;\n  color: string;\n  bgColor: string;\n  link: string;\n  imageUrl: string;\n}\n\n/** Single Map entity */\nexport interface BrawlMap {\n  id: number;\n  new: boolean;\n  disabled: boolean;\n  name: string;\n  hash: string;\n  version: number;\n  link: string;\n  imageUrl: string;\n  credit: string | null;\n  environment: MapEnvironment;\n  gameMode: GameMode;\n  lastActive: number | null;\n  dataUpdated: number;\n}\n\n/** Response from GET /v1/maps */\nexport interface MapsResponse {\n  list: BrawlMap[];\n}\n"
+/**
+ * BrawlAPI Map Types
+ * Based on https://api.brawlapi.com/v1/maps
+ */
+
+/** Map environment/theme */
+export interface MapEnvironment {
+  id: number;
+  scId: number;
+  name: string;
+  hash: string;
+  path: string;
+  version: number;
+  imageUrl: string;
+}
+
+/** Game mode associated with a map */
+export interface GameMode {
+  id: number;
+  scId: number;
+  name: string;
+  hash: string;
+  version: number;
+  color: string;
+  bgColor: string;
+  link: string;
+  imageUrl: string;
+}
+
+/** Single Map entity */
+export interface BrawlMap {
+  id: number;
+  new: boolean;
+  disabled: boolean;
+  name: string;
+  hash: string;
+  version: number;
+  link: string;
+  imageUrl: string;
+  credit: string | null;
+  environment: MapEnvironment;
+  gameMode: GameMode;
+  lastActive: number | null;
+  dataUpdated: number;
+}
+
+/** Response from GET /v1/maps */
+export interface MapsResponse {
+  list: BrawlMap[];
+}

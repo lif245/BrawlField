@@ -1,1 +1,77 @@
-"/**\n * BrawlAPI Brawler Types\n * Based on https://api.brawlapi.com/v1/brawlers\n */\n\n/** Brawler class/role categorization */\nexport interface BrawlerClass {\n  id: number;\n  name: string;\n}\n\n/** Brawler rarity tier */\nexport interface BrawlerRarity {\n  id: number;\n  name: string;\n  color: string;\n}\n\n/** Star Power ability */\nexport interface StarPower {\n  id: number;\n  name: string;\n  path: string;\n  version: number;\n  description: string;\n  descriptionHtml: string;\n  imageUrl: string;\n  released: boolean;\n}\n\n/** Gadget ability */\nexport interface Gadget {\n  id: number;\n  name: string;\n  path: string;\n  version: number;\n  description: string;\n  descriptionHtml: string;\n  imageUrl: string;\n  released: boolean;\n}\n\n/** Video associated with a brawler */\nexport interface BrawlerVideo {\n  type: number;\n  name: string;\n  videoUrl: string;\n}\n\n/** Single Brawler entity */\nexport interface Brawler {\n  id: number;\n  avatarId: number;\n  name: string;\n  hash: string;\n  path: string;\n  fankit: string;\n  released: boolean;\n  version: number;\n  link: string;\n  imageUrl: string;\n  imageUrl2: string;\n  imageUrl3: string;\n  class: BrawlerClass;\n  rarity: BrawlerRarity;\n  unlock: string | null;\n  description: string;\n  descriptionHtml: string;\n  starPowers: StarPower[];\n  gadgets: Gadget[];\n  videos: BrawlerVideo[];\n}\n\n/** Response from GET /v1/brawlers */\nexport interface BrawlersResponse {\n  list: Brawler[];\n}\n"
+/**
+ * BrawlAPI Brawler Types
+ * Based on https://api.brawlapi.com/v1/brawlers
+ */
+
+/** Brawler class/role categorization */
+export interface BrawlerClass {
+  id: number;
+  name: string;
+}
+
+/** Brawler rarity tier */
+export interface BrawlerRarity {
+  id: number;
+  name: string;
+  color: string;
+}
+
+/** Star Power ability */
+export interface StarPower {
+  id: number;
+  name: string;
+  path: string;
+  version: number;
+  description: string;
+  descriptionHtml: string;
+  imageUrl: string;
+  released: boolean;
+}
+
+/** Gadget ability */
+export interface Gadget {
+  id: number;
+  name: string;
+  path: string;
+  version: number;
+  description: string;
+  descriptionHtml: string;
+  imageUrl: string;
+  released: boolean;
+}
+
+/** Video associated with a brawler */
+export interface BrawlerVideo {
+  type: number;
+  name: string;
+  videoUrl: string;
+}
+
+/** Single Brawler entity */
+export interface Brawler {
+  id: number;
+  avatarId: number;
+  name: string;
+  hash: string;
+  path: string;
+  fankit: string;
+  released: boolean;
+  version: number;
+  link: string;
+  imageUrl: string;
+  imageUrl2: string;
+  imageUrl3: string;
+  class: BrawlerClass;
+  rarity: BrawlerRarity;
+  unlock: string | null;
+  description: string;
+  descriptionHtml: string;
+  starPowers: StarPower[];
+  gadgets: Gadget[];
+  videos: BrawlerVideo[];
+}
+
+/** Response from GET /v1/brawlers */
+export interface BrawlersResponse {
+  list: Brawler[];
+}

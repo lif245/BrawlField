@@ -1,1 +1,71 @@
-"/**\n * BrawlAPI â€” Map Endpoints\n * GET /v1/maps\n */\n\nimport { apiFetch, type RequestOptions } from './client';\nimport type { BrawlMap, MapsResponse } from '@/types/map';\n\n/**\n * Fetch all maps.\n */\nexport async function getAllMaps(\n  options?: RequestOptions,\n): Promise<BrawlMap[]> {\n  const data = await apiFetch<MapsResponse>('/maps', options);\n  return data.list;\n}\n\n/**\n * Fetch a single map by its numeric ID.\n */\nexport async function getMapById(\n  id: number,\n  options?: RequestOptions,\n): Promise<BrawlMap | undefined> {\n  const maps = await getAllMaps(options);\n  return maps.find((m) => m.id === id);\n}\n\n/**\n * Get only active (non-disabled) maps.\n */\nexport async function getActiveMaps(\n  options?: RequestOptions,\n): Promise<BrawlMap[]> {\n  const maps = await getAllMaps(options);\n  return maps.filter((m) => !m.disabled);\n}\n\n/**\n * Get maps filtered by game mode hash (e.g. 'gem-grab', 'brawl-ball').\n */\nexport async function getMapsByGameMode(\n  gameModeHash: string,\n  options?: RequestOptions,\n): Promise<BrawlMap[]> {\n  const maps = await getAllMaps(options);\n  return maps.filter((m) => m.gameMode.hash === gameModeHash);\n}\n\n/**\n * Get a list of unique game modes from available maps.\n */\nexport async function getGameModes(\n  options?: RequestOptions,\n): Promise<Array<{ id: number; name: string; hash: string }>> {\n  const maps = await getAllMaps(options);\n  const seen = new Map<number, { id: number; name: string; hash: string }>();\n\n  for (const map of maps) {\n    if (!seen.has(map.gameMode.id)) {\n      seen.set(map.gameMode.id, {\n        id: map.gameMode.id,\n        name: map.gameMode.name,\n        hash: map.gameMode.hash,\n      });\n    }\n  }\n\n  return Array.from(seen.values());\n}\n"
+/**
+ * BrawlAPI — Map Endpoints
+ * GET /v1/maps
+ */
+
+import { apiFetch, type RequestOptions } from './client';
+import type { BrawlMap, MapsResponse } from '@/types/map';
+
+/**
+ * Fetch all maps.
+ */
+export async function getAllMaps(
+  options?: RequestOptions,
+): Promise<BrawlMap[]> {
+  const data = await apiFetch<MapsResponse>('/maps', options);
+  return data.list;
+}
+
+/**
+ * Fetch a single map by its numeric ID.
+ */
+export async function getMapById(
+  id: number,
+  options?: RequestOptions,
+): Promise<BrawlMap | undefined> {
+  const maps = await getAllMaps(options);
+  return maps.find((m) => m.id === id);
+}
+
+/**
+ * Get only active (non-disabled) maps.
+ */
+export async function getActiveMaps(
+  options?: RequestOptions,
+): Promise<BrawlMap[]> {
+  const maps = await getAllMaps(options);
+  return maps.filter((m) => !m.disabled);
+}
+
+/**
+ * Get maps filtered by game mode hash (e.g. 'gem-grab', 'brawl-ball').
+ */
+export async function getMapsByGameMode(
+  gameModeHash: string,
+  options?: RequestOptions,
+): Promise<BrawlMap[]> {
+  const maps = await getAllMaps(options);
+  return maps.filter((m) => m.gameMode.hash === gameModeHash);
+}
+
+/**
+ * Get a list of unique game modes from available maps.
+ */
+export async function getGameModes(
+  options?: RequestOptions,
+): Promise<Array<{ id: number; name: string; hash: string }>> {
+  const maps = await getAllMaps(options);
+  const seen = new Map<number, { id: number; name: string; hash: string }>();
+
+  for (const map of maps) {
+    if (!seen.has(map.gameMode.id)) {
+      seen.set(map.gameMode.id, {
+        id: map.gameMode.id,
+        name: map.gameMode.name,
+        hash: map.gameMode.hash,
+      });
+    }
+  }
+
+  return Array.from(seen.values());
+}

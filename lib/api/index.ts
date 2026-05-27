@@ -1,1 +1,34 @@
-"/**\n * BrawlField API\n * Re-export all API functions for convenient access\n */\n\n// Base client\nexport { apiFetch, BrawlApiError } from './client';\nexport type { RequestOptions } from './client';\n\n// Brawler functions\nexport {\n  getAllBrawlers,\n  getBrawlerById,\n  getBrawlerByName,\n  getReleasedBrawlers,\n} from './brawlers';\n\n// Map functions\nexport {\n  getAllMaps,\n  getMapById,\n  getActiveMaps,\n  getMapsByGameMode,\n  getGameModes,\n} from './maps';\n\n// Event functions\nexport {\n  getEvents,\n  getActiveEvents,\n  getUpcomingEvents,\n  getIcons,\n  getIconsByBrawler,\n} from './events';\n"
+/**
+ * BrawlField API
+ * Re-export all API functions for convenient access
+ */
+
+// Base client
+export { apiFetch, BrawlApiError } from './client';
+export type { RequestOptions } from './client';
+
+// Brawler functions
+export {
+  getAllBrawlers,
+  getBrawlerById,
+  getBrawlerByName,
+  getReleasedBrawlers,
+} from './brawlers';
+
+// Map functions
+export {
+  getAllMaps,
+  getMapById,
+  getActiveMaps,
+  getMapsByGameMode,
+  getGameModes,
+} from './maps';
+
+// Event functions
+export {
+  getEvents,
+  getActiveEvents,
+  getUpcomingEvents,
+  getIcons,
+  getIconsByBrawler,
+} from './events';

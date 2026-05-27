@@ -1,2 +1,88 @@
-"/**\n * BrawlAPI Base Client\n *\n * Base URL: https://api.brawlapi.com/v1\n * Auth: None required (public API)\n * Rate Limits: No documented rate limits\n */\n\nconst BASE_URL = 'https://api.brawlapi.com/v1';\n\n/** Custom error class for API errors */\nexport class BrawlApiError extends Error {\n  constructor(\n    message: string,\n    public readonly status: number,\n    public readonly endpoint: string,\n  ) {\n    super(message);\n    this.name = 'BrawlApiError';\n  }\n}\n\n/** Options for API requests */\nexport interface RequestOptions {\n  /** AbortSignal for request cancellation */\n  signal?: AbortSignal;\n  /** Custom headers to merge */\n  headers?: Record<string, string>;\n  /** Cache mode */\n  cache?: RequestCache;\n  /** Next.js revalidation (seconds), only used with Next.js fetch */\n  revalidate?: number;\n}\n\n/**\n * Generic fetch wrapper for BrawlAPI endpoints.\n *\n * @param endpoint - The API path (e.g. '/brawlers')\n * @param options  - Optional request configuration\n * @returns Parsed JSON response typed as T\n * @throws {BrawlApiError} When the API returns a non-OK status\n */\nexport async function apiFetch<T>(\n  endpoint: string,\n  options: RequestOptions = {},\n): Promise<T> {\n  const url = `${BASE_URL}${endpoint}`;\n\n  const fetchOptions: RequestInit & { next?: { revalidate: number } } = {\n    method: 'GET',\n    headers: {\n      Accept: 'application/json',\n      ...options.headers,\n    },\n    signal: options.signal,\n    cache: options.cache,\n  };\n\n  // Support Next.js ISR revalidation\n  if (options.revalidate !== undefined) {\n    fetchOptions.next = { revalidate: options.revalidate };\n  }\n\n  let response: Response;\n\n  try {\n    response = await fetch(url, fetchOptions);\n  } catch (error) {\n    if (error instanceof DOMException && error.name === 'AbortError') {\n      throw error; // Let abort errors propagate as-is\n    }\n    throw new BrawlApiError(\n      `Network error fetching ${endpoint}: ${error instanceof Error ? error.message : String(error)}`,\n 
-<truncated 351 bytes>
+/**
+ * BrawlAPI Base Client
+ *
+ * Base URL: https://api.brawlapi.com/v1
+ * Auth: None required (public API)
+ * Rate Limits: No documented rate limits
+ */
+
+const BASE_URL = 'https://api.brawlapi.com/v1';
+
+/** Custom error class for API errors */
+export class BrawlApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly endpoint: string,
+  ) {
+    super(message);
+    this.name = 'BrawlApiError';
+  }
+}
+
+/** Options for API requests */
+export interface RequestOptions {
+  /** AbortSignal for request cancellation */
+  signal?: AbortSignal;
+  /** Custom headers to merge */
+  headers?: Record<string, string>;
+  /** Cache mode */
+  cache?: RequestCache;
+  /** Next.js revalidation (seconds), only used with Next.js fetch */
+  revalidate?: number;
+}
+
+/**
+ * Generic fetch wrapper for BrawlAPI endpoints.
+ *
+ * @param endpoint - The API path (e.g. '/brawlers')
+ * @param options  - Optional request configuration
+ * @returns Parsed JSON response typed as T
+ * @throws {BrawlApiError} When the API returns a non-OK status
+ */
+export async function apiFetch<T>(
+  endpoint: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const url = `${BASE_URL}${endpoint}`;
+
+  const fetchOptions: RequestInit & { next?: { revalidate: number } } = {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...options.headers,
+    },
+    signal: options.signal,
+    cache: options.cache,
+  };
+
+  // Support Next.js ISR revalidation
+  if (options.revalidate !== undefined) {
+    fetchOptions.next = { revalidate: options.revalidate };
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error; // Let abort errors propagate as-is
+    }
+    throw new BrawlApiError(
+      `Network error fetching ${endpoint}: ${error instanceof Error ? error.message : String(error)}`,
+      500,
+      endpoint
+    );
+  }
+
+  if (!response.ok) {
+    throw new BrawlApiError(
+      `BrawlAPI error: ${response.status} ${response.statusText}`,
+      response.status,
+      endpoint
+    );
+  }
+
+  return response.json() as Promise<T>;
+}

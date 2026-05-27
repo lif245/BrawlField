@@ -1,1 +1,52 @@
-"/**\n * BrawlAPI â€” Brawler Endpoints\n * GET /v1/brawlers\n */\n\nimport { apiFetch, type RequestOptions } from './client';\nimport type { Brawler, BrawlersResponse } from '@/types/brawler';\n\n/**\n * Fetch all brawlers.\n */\nexport async function getAllBrawlers(\n  options?: RequestOptions,\n): Promise<Brawler[]> {\n  const data = await apiFetch<BrawlersResponse>('/brawlers', options);\n  return data.list;\n}\n\n/**\n * Fetch a single brawler by its numeric ID.\n * Falls back to client-side filtering from the full list because\n * BrawlAPI does not expose a single-brawler endpoint.\n */\nexport async function getBrawlerById(\n  id: number,\n  options?: RequestOptions,\n): Promise<Brawler | undefined> {\n  const brawlers = await getAllBrawlers(options);\n  return brawlers.find((b) => b.id === id);\n}\n\n/**\n * Fetch a single brawler by name (case-insensitive).\n */\nexport async function getBrawlerByName(\n  name: string,\n  options?: RequestOptions,\n): Promise<Brawler | undefined> {\n  const brawlers = await getAllBrawlers(options);\n  const lower = name.toLowerCase();\n  return brawlers.find((b) => b.name.toLowerCase() === lower);\n}\n\n/**\n * Get only released brawlers.\n */\nexport async function getReleasedBrawlers(\n  options?: RequestOptions,\n): Promise<Brawler[]> {\n  const brawlers = await getAllBrawlers(options);\n  return brawlers.filter((b) => b.released);\n}\n"
+/**
+ * BrawlAPI — Brawler Endpoints
+ * GET /v1/brawlers
+ */
+
+import { apiFetch, type RequestOptions } from './client';
+import type { Brawler, BrawlersResponse } from '@/types/brawler';
+
+/**
+ * Fetch all brawlers.
+ */
+export async function getAllBrawlers(
+  options?: RequestOptions,
+): Promise<Brawler[]> {
+  const data = await apiFetch<BrawlersResponse>('/brawlers', options);
+  return data.list;
+}
+
+/**
+ * Fetch a single brawler by its numeric ID.
+ * Falls back to client-side filtering from the full list because
+ * BrawlAPI does not expose a single-brawler endpoint.
+ */
+export async function getBrawlerById(
+  id: number,
+  options?: RequestOptions,
+): Promise<Brawler | undefined> {
+  const brawlers = await getAllBrawlers(options);
+  return brawlers.find((b) => b.id === id);
+}
+
+/**
+ * Fetch a single brawler by name (case-insensitive).
+ */
+export async function getBrawlerByName(
+  name: string,
+  options?: RequestOptions,
+): Promise<Brawler | undefined> {
+  const brawlers = await getAllBrawlers(options);
+  const lower = name.toLowerCase();
+  return brawlers.find((b) => b.name.toLowerCase() === lower);
+}
+
+/**
+ * Get only released brawlers.
+ */
+export async function getReleasedBrawlers(
+  options?: RequestOptions,
+): Promise<Brawler[]> {
+  const brawlers = await getAllBrawlers(options);
+  return brawlers.filter((b) => b.released);
+}

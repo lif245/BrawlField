@@ -1,1 +1,52 @@
-"/**\n * BrawlAPI Event Types\n * Based on https://api.brawlapi.com/v1/events\n */\n\n/** Compact map info inside an event */\nexport interface EventMap {\n  id: number;\n  name: string;\n}\n\n/** Compact game mode info inside an event */\nexport interface EventMode {\n  id: number;\n  name: string;\n  hash: string;\n  color: string;\n}\n\n/** Single Event (active or upcoming) */\nexport interface GameEvent {\n  slot: number;\n  map: EventMap | null;\n  mode: EventMode | null;\n  startTime: string;\n  endTime: string;\n}\n\n/** Response from GET /v1/events */\nexport interface EventsResponse {\n  active: GameEvent[];\n  upcoming: GameEvent[];\n}\n\n/**\n * BrawlAPI Icon Types\n * Based on https://api.brawlapi.com/v1/icons\n */\n\n/** Single player icon */\nexport interface PlayerIcon {\n  id: number;\n  name: string;\n  name2: string;\n  imageUrl: string;\n  brawler: number | null;\n}\n\n/** Response from GET /v1/icons */\nexport interface IconsResponse {\n  player: Record<string, PlayerIcon>;\n}\n"
+/**
+ * BrawlAPI Event Types
+ * Based on https://api.brawlapi.com/v1/events
+ */
+
+/** Compact map info inside an event */
+export interface EventMap {
+  id: number;
+  name: string;
+}
+
+/** Compact game mode info inside an event */
+export interface EventMode {
+  id: number;
+  name: string;
+  hash: string;
+  color: string;
+}
+
+/** Single Event (active or upcoming) */
+export interface GameEvent {
+  slot: number;
+  map: EventMap | null;
+  mode: EventMode | null;
+  startTime: string;
+  endTime: string;
+}
+
+/** Response from GET /v1/events */
+export interface EventsResponse {
+  active: GameEvent[];
+  upcoming: GameEvent[];
+}
+
+/**
+ * BrawlAPI Icon Types
+ * Based on https://api.brawlapi.com/v1/icons
+ */
+
+/** Single player icon */
+export interface PlayerIcon {
+  id: number;
+  name: string;
+  name2: string;
+  imageUrl: string;
+  brawler: number | null;
+}
+
+/** Response from GET /v1/icons */
+export interface IconsResponse {
+  player: Record<string, PlayerIcon>;
+}

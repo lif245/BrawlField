@@ -1,1 +1,63 @@
-"/**\n * BrawlAPI â€” Event & Icon Endpoints\n * GET /v1/events\n * GET /v1/icons\n */\n\nimport { apiFetch, type RequestOptions } from './client';\nimport type {\n  GameEvent,\n  EventsResponse,\n  IconsResponse,\n  PlayerIcon,\n} from '@/types/event';\n\n/**\n * Fetch the current event rotation (active + upcoming).\n */\nexport async function getEvents(\n  options?: RequestOptions,\n): Promise<EventsResponse> {\n  return apiFetch<EventsResponse>('/events', options);\n}\n\n/**\n * Fetch only currently active events.\n */\nexport async function getActiveEvents(\n  options?: RequestOptions,\n): Promise<GameEvent[]> {\n  const data = await getEvents(options);\n  return data.active;\n}\n\n/**\n * Fetch only upcoming events.\n */\nexport async function getUpcomingEvents(\n  options?: RequestOptions,\n): Promise<GameEvent[]> {\n  const data = await getEvents(options);\n  return data.upcoming;\n}\n\n/**\n * Fetch all player icons.\n */\nexport async function getIcons(\n  options?: RequestOptions,\n): Promise<Record<string, PlayerIcon>> {\n  const data = await apiFetch<IconsResponse>('/icons', options);\n  return data.player;\n}\n\n/**\n * Fetch icons associated with a specific brawler ID.\n */\nexport async function getIconsByBrawler(\n  brawlerId: number,\n  options?: RequestOptions,\n): Promise<PlayerIcon[]> {\n  const icons = await getIcons(options);\n  return Object.values(icons).filter((icon) => icon.brawler === brawlerId);\n}\n"
+/**
+ * BrawlAPI — Event & Icon Endpoints
+ * GET /v1/events
+ * GET /v1/icons
+ */
+
+import { apiFetch, type RequestOptions } from './client';
+import type {
+  GameEvent,
+  EventsResponse,
+  IconsResponse,
+  PlayerIcon,
+} from '@/types/event';
+
+/**
+ * Fetch the current event rotation (active + upcoming).
+ */
+export async function getEvents(
+  options?: RequestOptions,
+): Promise<EventsResponse> {
+  return apiFetch<EventsResponse>('/events', options);
+}
+
+/**
+ * Fetch only currently active events.
+ */
+export async function getActiveEvents(
+  options?: RequestOptions,
+): Promise<GameEvent[]> {
+  const data = await getEvents(options);
+  return data.active;
+}
+
+/**
+ * Fetch only upcoming events.
+ */
+export async function getUpcomingEvents(
+  options?: RequestOptions,
+): Promise<GameEvent[]> {
+  const data = await getEvents(options);
+  return data.upcoming;
+}
+
+/**
+ * Fetch all player icons.
+ */
+export async function getIcons(
+  options?: RequestOptions,
+): Promise<Record<string, PlayerIcon>> {
+  const data = await apiFetch<IconsResponse>('/icons', options);
+  return data.player;
+}
+
+/**
+ * Fetch icons associated with a specific brawler ID.
+ */
+export async function getIconsByBrawler(
+  brawlerId: number,
+  options?: RequestOptions,
+): Promise<PlayerIcon[]> {
+  const icons = await getIcons(options);
+  return Object.values(icons).filter((icon) => icon.brawler === brawlerId);
+}
