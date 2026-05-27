@@ -54,6 +54,7 @@ export default function TierListClient({ brawlers }: TierListClientProps) {
   // Notification system
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showTaintedModal, setShowTaintedModal] = useState(false);
 
   // Trigger temporary notification
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
@@ -467,16 +468,21 @@ export default function TierListClient({ brawlers }: TierListClientProps) {
       ctx.font = "bold 12px 'Outfit', sans-serif";
       ctx.fillText("CREATED BY BRAWL STARS ESPORTS COMBAT PLANNER", width - 40, currentY + 35);
 
-      // 7. Download Trigger
-      const dataUrl = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.download = `brawlfield-tier-list-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast("Tier list exported and downloaded successfully! Share it on Discord!", "success");
+      // 7. Download Trigger with security CORS fallback
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.download = `brawlfield-tier-list-${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("Tier list exported and downloaded successfully! Share it on Discord!", "success");
+      } catch (toDataUrlError) {
+        console.warn("Canvas export was blocked by browser security CORS limits (Tainted Canvas):", toDataUrlError);
+        setShowTaintedModal(true);
+        showToast("CORS blocked auto-download. Opening visual sharing dashboard!", "info");
+      }
     } catch (err) {
       console.error(err);
       showToast("Export failed: Please ensure network connection and retry.", "error");
@@ -728,6 +734,68 @@ export default function TierListClient({ brawlers }: TierListClientProps) {
 
           </Card>
         </div>
+
+        {/* CORS Security Fallback Modal */}
+        {showTaintedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <Card variant="premium" className="w-full max-w-lg border border-white/10 bg-dark-card shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+              
+              <button 
+                onClick={() => setShowTaintedModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-white cursor-pointer"
+              >
+                <CloseIcon size={20} />
+              </button>
+
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-xl font-heading font-black text-white flex items-center gap-2">
+                    <span className="text-brawl-yellow">🔒 Browser Security</span> Sharing Hub
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">
+                    เบราว์เซอร์ของคุณจำกัดการดาวน์โหลดภาพอัตโนมัติเนื่องจากติดมาตรการความปลอดภัย CORS (Tainted Canvas)
+                  </p>
+                </div>
+
+                <div className="bg-black/30 border border-white/5 p-4 rounded-xl space-y-3.5 text-xs text-gray-300">
+                  <p>
+                    เพื่อนำผลงานการจัด Tier List ไปเผยแพร่ต่อ คุณสามารถใช้วิธีการแชร์สำรองที่รวดเร็วและเป็นที่นิยมที่สุดต่อไปนี้ได้ทันทีครับ:
+                  </p>
+                  
+                  <div className="space-y-2.5">
+                    <div className="flex gap-3">
+                      <span className="text-brawl-yellow font-bold shrink-0">1.</span>
+                      <p>
+                        <strong>กดปุ่มจับภาพหน้าจอ (Screen Capture / Print Screen):</strong> เป็นวิธีที่นักแข่งส่วนใหญ่นิยมใช้เนื่องจากสะดวกรวดเร็วและได้ความละเอียดตามจริงทันที!
+                      </p>
+                    </div>
+                    
+                    <div className="flex gap-3">
+                      <span className="text-brawl-purple font-bold shrink-0">2.</span>
+                      <p>
+                        <strong>บันทึกตารางลงฐานข้อมูลออนไลน์:</strong> กดปิดป๊อปอัพนี้แล้วคลิกปุ่ม <strong>"Save List"</strong> สีม่วงด้านบน เพื่อเซฟผังไว้บนหน้าโปรไฟล์ของคุณ และนำลิงก์โปรไฟล์ไปแชร์ให้เพื่อนๆ เข้ามารับชม meta ชาร์ตได้โดยตรง!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    isSkewed={false}
+                    onClick={() => setShowTaintedModal(false)}
+                    className="glow-btn-yellow text-xs"
+                  >
+                    เข้าใจแล้ว (Close Window)
+                  </Button>
+                </div>
+              </div>
+
+            </Card>
+          </div>
+        )}
+
       </PageContainer>
     </div>
   );

@@ -343,6 +343,59 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     currentAction.current = null;
   };
 
+  // Touch drawing event handlers for iPad/mobile support
+  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const xPct = ((touch.clientX - rect.left) / rect.width) * 100;
+    const yPct = ((touch.clientY - rect.top) / rect.height) * 100;
+
+    isDrawing.current = true;
+    setRedoStack([]);
+
+    currentAction.current = {
+      type: tool,
+      color: color,
+      thickness: thickness,
+      points: [{ x: xPct, y: yPct }]
+    };
+  };
+
+  const handleCanvasTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current || !currentAction.current || !canvasRef.current || e.touches.length !== 1) return;
+    
+    if (e.cancelable) e.preventDefault();
+
+    const touch = e.touches[0];
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const xPct = ((touch.clientX - rect.left) / rect.width) * 100;
+    const yPct = ((touch.clientY - rect.top) / rect.height) * 100;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (tool === "freehand") {
+      currentAction.current.points.push({ x: xPct, y: yPct });
+    } else if (tool === "arrow") {
+      if (currentAction.current.points.length === 1) {
+        currentAction.current.points.push({ x: xPct, y: yPct });
+      } else {
+        currentAction.current.points[1] = { x: xPct, y: yPct };
+      }
+    }
+
+    redrawCanvas(canvas, ctx, actions, currentAction.current, markers);
+  };
+
+  const handleCanvasTouchEnd = () => {
+    handleCanvasMouseUp();
+  };
+
   // Canvas Actions
   const handleUndo = () => {
     if (actions.length === 0) return;
@@ -846,6 +899,9 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                 onMouseMove={handleCanvasMouseMove}
                 onMouseUp={handleCanvasMouseUp}
                 onMouseLeave={handleCanvasMouseUp}
+                onTouchStart={handleCanvasTouchStart}
+                onTouchMove={handleCanvasTouchMove}
+                onTouchEnd={handleCanvasTouchEnd}
                 className="absolute inset-0 h-full w-full z-10 cursor-crosshair touch-none"
               />
 
@@ -860,6 +916,13 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                         e.stopPropagation();
                         // Only trigger left click select & drag
                         if (e.button === 0) {
+                          setActiveDragMarkerId(marker.id);
+                          setSelectedMarkerId(marker.id);
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        if (e.touches.length === 1) {
                           setActiveDragMarkerId(marker.id);
                           setSelectedMarkerId(marker.id);
                         }
@@ -946,6 +1009,12 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                         e.stopPropagation();
                         e.preventDefault();
                         if (e.button === 0) {
+                          setActiveDragHandle({ markerId: selectedMarker.id, skillId: skill.id });
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        if (e.touches.length === 1) {
                           setActiveDragHandle({ markerId: selectedMarker.id, skillId: skill.id });
                         }
                       }}
