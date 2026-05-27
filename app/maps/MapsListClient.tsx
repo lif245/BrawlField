@@ -11,6 +11,15 @@ import { Card, CardHeader, CardContent } from "@/components/ui/Card";
 import { SearchIcon, CloseIcon, ShieldIcon, TrophyIcon } from "@/components/ui/icons";
 import type { BrawlMap } from "@/types/map";
 
+const RANKED_MAPS = [
+  "center stage", "pinball dreams", "sneaky fields", "triple dribble",
+  "double swoosh", "gem fort", "hard rock mine", "undermine",
+  "belle's rock", "flaring phoenix", "flowing springs", "goldarm gulch", "new horizons", "out in the open",
+  "dueling beetles", "open business", "parallel plays", "ring of fire",
+  "bridge too far", "hot potato", "kaboom canyon", "safe zone",
+  "dry season", "hideout", "layer cake", "shooting star"
+];
+
 interface MapsListClientProps {
   initialMaps: BrawlMap[];
 }
@@ -21,6 +30,7 @@ export default function MapsListClient({ initialMaps }: MapsListClientProps) {
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [selectedModeHash, setSelectedModeHash] = useState<string | null>(null);
+  const [showOnlyRanked, setShowOnlyRanked] = useState(false);
 
   // Keep search query in sync with URL params if they change (e.g. clicking map link on Home)
   useEffect(() => {
@@ -53,9 +63,15 @@ export default function MapsListClient({ initialMaps }: MapsListClientProps) {
     return initialMaps.filter((map) => {
       const matchesSearch = map.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesMode = selectedModeHash ? map.gameMode.hash === selectedModeHash : true;
-      return matchesSearch && matchesMode;
+      
+      const normalizedMapName = map.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const matchesRanked = showOnlyRanked
+        ? RANKED_MAPS.some((r) => r.replace(/[^a-z0-9]/g, "") === normalizedMapName)
+        : true;
+        
+      return matchesSearch && matchesMode && matchesRanked;
     });
-  }, [initialMaps, searchQuery, selectedModeHash]);
+  }, [initialMaps, searchQuery, selectedModeHash, showOnlyRanked]);
 
   // Group maps by Game Mode
   const groupedMaps = useMemo(() => {
@@ -78,6 +94,7 @@ export default function MapsListClient({ initialMaps }: MapsListClientProps) {
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedModeHash(null);
+    setShowOnlyRanked(false);
   };
 
   return (
@@ -117,8 +134,23 @@ export default function MapsListClient({ initialMaps }: MapsListClientProps) {
               )}
             </div>
 
+            {/* Ranked Map Filter Toggle Button */}
+            <button
+              onClick={() => setShowOnlyRanked(!showOnlyRanked)}
+              className={`cursor-pointer text-xs font-heading font-extrabold uppercase px-4 py-2.5 rounded transform -skew-x-12 border transition-all duration-200 flex items-center justify-center gap-2 shrink-0 ${
+                showOnlyRanked
+                  ? "bg-brawl-yellow text-black border-brawl-yellow shadow-[0_0_15px_rgba(247,211,58,0.35)]"
+                  : "bg-white/5 text-gray-400 border-white/10 hover:text-white hover:border-white/20"
+              }`}
+            >
+              <span className="transform skew-x-12 flex items-center gap-1.5">
+                <TrophyIcon size={16} className={showOnlyRanked ? "text-black" : "text-brawl-yellow"} />
+                Ranked Rotation Only
+              </span>
+            </button>
+
             {/* Clear Filters Button */}
-            {(searchQuery || selectedModeHash) && (
+            {(searchQuery || selectedModeHash || showOnlyRanked) && (
               <Button 
                 variant="ghost" 
                 size="sm" 

@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { getAllMaps } from "@/lib/api/maps";
+import { getActiveMaps } from "@/lib/api/maps";
 import MapsListClient from "./MapsListClient";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -42,7 +42,7 @@ export default async function MapsPage() {
   let maps: BrawlMap[] = [];
 
   try {
-    maps = await getAllMaps({ cache: "no-store" });
+    maps = await getActiveMaps({ cache: "no-store" });
   } catch (error) {
     console.error("Failed to fetch maps on server:", error);
   }
