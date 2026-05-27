@@ -32,11 +32,23 @@ interface DrawAction {
   points: Array<{ x: number; y: number }>; // Saved as percentages (0 - 100) relative to board
 }
 
+interface BrawlerSkillIndicator {
+  id: string;
+  type: "attack" | "super" | "gadget" | "starpower";
+  name: string;
+  shape: "circle" | "cone" | "line";
+  color: string;
+  range: number; // percentage (5 - 60) relative to board size
+  angle: number; // degrees (0 - 360)
+  width: number; // degrees for cone, percentage for line width
+}
+
 interface BrawlerMarker {
   id: string; // unique instance ID
   brawler: Brawler;
   x: number; // percentage (0 - 100)
   y: number; // percentage (0 - 100)
+  skills?: BrawlerSkillIndicator[];
 }
 
 const COLORS = [
@@ -59,6 +71,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
   // Placed brawlers markers state
   const [markers, setMarkers] = useState<BrawlerMarker[]>([]);
   const [activeDragMarkerId, setActiveDragMarkerId] = useState<string | null>(null);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
 
   // Sidebar brawler filter state
   const [brawlerSearch, setBrawlerSearch] = useState("");
@@ -82,6 +95,11 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // Find currently active selected marker
+  const selectedMarker = useMemo(() => {
+    return markers.find((m) => m.id === selectedMarkerId) || null;
+  }, [markers, selectedMarkerId]);
+
   // Load strategy from LocalStorage on mount if exists
   useEffect(() => {
     const saved = localStorage.getItem(`bf-strategy-${map.id}`);
@@ -99,7 +117,8 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                 id: m.id || `marker-${Date.now()}-${Math.random()}`,
                 brawler: found,
                 x: m.x,
-                y: m.y
+                y: m.y,
+                skills: m.skills || []
               };
             }
             return null;
@@ -127,7 +146,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     // Trigger immediate canvas redrawing of loaded paths
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      redrawCanvas(canvas, ctx, actions);
+      redrawCanvas(canvas, ctx, actions, null, markers);
     }
   };
 
@@ -140,18 +159,70 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     return () => {
       window.removeEventListener("resize", adjustCanvasSize);
     };
-  }, [actions]);
+  }, [actions, markers]);
 
   // Main Canvas redraw routine
   const redrawCanvas = (
     canvas: HTMLCanvasElement, 
     ctx: CanvasRenderingContext2D, 
     actionsList: DrawAction[],
-    inProgressAction?: DrawAction | null
+    inProgressAction?: DrawAction | null,
+    markersList?: BrawlerMarker[]
   ) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw past actions
+    // 1. Draw Brawler Skill Range Indicators (background layer behind pencil strokes)
+    if (markersList) {
+      markersList.forEach((marker) => {
+        if (!marker.skills) return;
+
+        marker.skills.forEach((ind) => {
+          const cx = (marker.x / 100) * canvas.width;
+          const cy = (marker.y / 100) * canvas.height;
+          const r = (ind.range / 100) * Math.min(canvas.width, canvas.height);
+          
+          ctx.strokeStyle = ind.color;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([6, 4]); // cool premium tactical dash
+          ctx.fillStyle = `${ind.color}20`; // ~12% opacity neon glow fill
+
+          if (ind.shape === "circle") {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else if (ind.shape === "cone") {
+            // angle is centered, we span width/2 on both sides
+            const startAngle = ((ind.angle - ind.width / 2) * Math.PI) / 180;
+            const endAngle = ((ind.angle + ind.width / 2) * Math.PI) / 180;
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, r, startAngle, endAngle);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else if (ind.shape === "line") {
+            const rectWidth = (ind.width / 100) * Math.min(canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((ind.angle * Math.PI) / 180);
+            ctx.beginPath();
+            // Rectangle starts at brawler (0,0) and extends forward by range (r)
+            ctx.rect(0, -rectWidth / 2, r, rectWidth);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            ctx.setLineDash([]);
+          }
+        });
+      });
+    }
+
+    // 2. Draw past drawing actions
     const drawSingleAction = (act: DrawAction) => {
       if (!act || !act.points || act.points.length < 1) return;
 
@@ -257,7 +328,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     }
 
     // Redraw canvas with full history + active drawing preview
-    redrawCanvas(canvas, ctx, actions, currentAction.current);
+    redrawCanvas(canvas, ctx, actions, currentAction.current, markers);
   };
 
   const handleCanvasMouseUp = () => {
@@ -298,6 +369,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
       setActions([]);
       setRedoStack([]);
       setMarkers([]);
+      setSelectedMarkerId(null);
       localStorage.removeItem(`bf-strategy-${map.id}`);
       showToast("Strategy board reset", "info");
     }
@@ -334,20 +406,93 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
 
   // Place Brawler on the board
   const placeBrawler = (brawler: Brawler) => {
+    const markerId = `marker-${Date.now()}-${Math.random()}`;
     // Generate new marker at the center
     const newMarker: BrawlerMarker = {
-      id: `marker-${Date.now()}-${Math.random()}`,
+      id: markerId,
       brawler: brawler,
       x: 50,
       y: 50,
+      skills: []
     };
     setMarkers((prev) => [...prev, newMarker]);
+    setSelectedMarkerId(markerId); // Spawn opens control dashboard immediately
     showToast(`Placed ${brawler.name} on the map. Drag them to position!`, "success");
   };
 
   // Remove placed Brawler
   const removeMarker = (id: string) => {
     setMarkers((prev) => prev.filter((m) => m.id !== id));
+    if (selectedMarkerId === id) {
+      setSelectedMarkerId(null);
+    }
+  };
+
+  // Add a range indicator to the selected brawler marker
+  const addSkillIndicator = (
+    type: "attack" | "super" | "gadget" | "starpower",
+    name: string,
+    defaultShape: "circle" | "cone" | "line",
+    color: string
+  ) => {
+    if (!selectedMarkerId) return;
+
+    const newIndicator: BrawlerSkillIndicator = {
+      id: `skill-${Date.now()}-${Math.random()}`,
+      type,
+      name,
+      shape: defaultShape,
+      color,
+      range: 15, // 15% range default
+      angle: 270, // Facing upwards default (North)
+      width: defaultShape === "cone" ? 45 : 4, // 45° default sweep for cone, 4% length default thickness for line
+    };
+
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id === selectedMarkerId) {
+          return {
+            ...m,
+            skills: [...(m.skills || []), newIndicator],
+          };
+        }
+        return m;
+      })
+    );
+    showToast(`Added ${name} range indicator to map!`, "success");
+  };
+
+  // Delete dynamic range indicator
+  const deleteSkillIndicator = (skillId: string) => {
+    if (!selectedMarkerId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id === selectedMarkerId) {
+          return {
+            ...m,
+            skills: (m.skills || []).filter((s) => s.id !== skillId),
+          };
+        }
+        return m;
+      })
+    );
+    showToast("Range indicator removed", "info");
+  };
+
+  // Update specific active indicator properties
+  const updateSkillIndicator = (skillId: string, updates: Partial<BrawlerSkillIndicator>) => {
+    if (!selectedMarkerId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id === selectedMarkerId) {
+          return {
+            ...m,
+            skills: (m.skills || []).map((s) => (s.id === skillId ? { ...s, ...updates } : s)),
+          };
+        }
+        return m;
+      })
+    );
   };
 
   // Rarity mappings
@@ -376,10 +521,12 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
       timestamp: new Date().toISOString(),
       actions: actions,
       markers: markers.map((m) => ({
+        id: m.id,
         brawlerId: m.brawler.id,
         brawlerName: m.brawler.name,
         x: parseFloat(m.x.toFixed(2)),
         y: parseFloat(m.y.toFixed(2)),
+        skills: m.skills || []
       })),
     };
 
@@ -398,6 +545,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
         brawlerId: m.brawler.id,
         x: parseFloat(m.x.toFixed(2)),
         y: parseFloat(m.y.toFixed(2)),
+        skills: m.skills || []
       })),
     };
 
@@ -639,157 +787,394 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
 
               {/* Interactive Placed Floating Brawler Bubble Markers Layer */}
               <div className="absolute inset-0 z-20 pointer-events-none">
-                {markers.map((marker) => (
-                  <div
-                    key={marker.id}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      // Only trigger left click drag
-                      if (e.button === 0) {
-                        setActiveDragMarkerId(marker.id);
-                      }
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      removeMarker(marker.id);
-                      showToast(`Removed ${marker.brawler.name} marker`, "info");
-                    }}
-                    className={`absolute pointer-events-auto h-11 w-11 rounded-full cursor-grab active:cursor-grabbing hover:scale-115 active:scale-95 border-2 flex items-center justify-center transition-transform shadow-2xl relative group bg-dark-surface`}
-                    style={{ 
-                      left: `${marker.x}%`, 
-                      top: `${marker.y}%`,
-                      transform: "translate(-50%, -50%)",
-                      borderColor: marker.brawler.rarity?.color || "#ffffff",
-                      boxShadow: `0 8px 24px rgba(0,0,0,0.6), 0 0 12px ${(marker.brawler.rarity?.color || "#ffffff")}40`
-                    }}
-                  >
-                    {/* Brawler avatar inside bubble */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={marker.brawler.imageUrl} 
-                      alt="" 
-                      className="h-9 w-9 object-contain rounded-full pointer-events-none"
-                    />
-
-                    {/* Small close click button */}
-                    <button
-                      onMouseDown={(e) => e.stopPropagation()} // stop drag triggering
-                      onClick={() => {
+                {markers.map((marker) => {
+                  const isSelected = marker.id === selectedMarkerId;
+                  return (
+                    <div
+                      key={marker.id}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        // Only trigger left click select & drag
+                        if (e.button === 0) {
+                          setActiveDragMarkerId(marker.id);
+                          setSelectedMarkerId(marker.id);
+                        }
+                      }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
                         removeMarker(marker.id);
                         showToast(`Removed ${marker.brawler.name} marker`, "info");
                       }}
-                      className="absolute -top-1 -right-1 h-4.5 w-4.5 bg-brawl-red border border-red-700 text-white rounded-full flex items-center justify-center text-[8px] font-black pointer-events-auto hover:bg-red-500 shadow-md"
+                      className={`absolute pointer-events-auto h-11 w-11 rounded-full cursor-grab active:cursor-grabbing hover:scale-115 active:scale-95 border-2 flex items-center justify-center transition-all shadow-2xl relative group bg-dark-surface ${
+                        isSelected 
+                          ? "ring-4 ring-brawl-yellow animate-pulse border-brawl-yellow scale-110" 
+                          : ""
+                      }`}
+                      style={{ 
+                        left: `${marker.x}%`, 
+                        top: `${marker.y}%`,
+                        transform: "translate(-50%, -50%)",
+                        borderColor: marker.brawler.rarity?.color || "#ffffff",
+                        boxShadow: isSelected 
+                          ? `0 0 25px ${marker.brawler.rarity?.color || "#ffffff"}, 0 8px 32px rgba(0,0,0,0.8)`
+                          : `0 8px 24px rgba(0,0,0,0.6), 0 0 12px ${(marker.brawler.rarity?.color || "#ffffff")}40`
+                      }}
                     >
-                      ×
-                    </button>
+                      {/* Brawler avatar inside bubble */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={marker.brawler.imageUrl} 
+                        alt="" 
+                        className="h-9 w-9 object-contain rounded-full pointer-events-none"
+                      />
 
-                    {/* Small name identifier hover tag */}
-                    <div className="absolute bottom-[-22px] bg-black/90 border border-white/10 rounded-md px-1.5 py-0.5 text-[7px] font-heading font-black uppercase text-white tracking-widest opacity-90 select-none group-hover:scale-110">
-                      {marker.brawler.name}
+                      {/* Small close click button */}
+                      <button
+                        onMouseDown={(e) => e.stopPropagation()} // stop drag triggering
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeMarker(marker.id);
+                          showToast(`Removed ${marker.brawler.name} marker`, "info");
+                        }}
+                        className="absolute -top-1 -right-1 h-4.5 w-4.5 bg-brawl-red border border-red-700 text-white rounded-full flex items-center justify-center text-[8px] font-black pointer-events-auto hover:bg-red-500 shadow-md"
+                      >
+                        ×
+                      </button>
+
+                      {/* Small name identifier hover tag */}
+                      <div className="absolute bottom-[-22px] bg-black/90 border border-white/10 rounded-md px-1.5 py-0.5 text-[7px] font-heading font-black uppercase text-white tracking-widest opacity-90 select-none group-hover:scale-110">
+                        {marker.brawler.name}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Instructions float overlay */}
               <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none bg-black/75 border border-white/5 backdrop-blur-sm rounded-xl p-2.5 text-[9px] text-gray-400">
-                👉 <strong>Draft Instructions:</strong> Select Brawlers in the right roster sidebar to spawn a bubble. Drag bubbles to arrange positioning. Double-click or click (x) to remove a bubble. Sketch paths using drawing options.
+                👉 <strong>Tactic Instructions:</strong> Click brawler avatars in roster to spawn. Click & Drag to move them. **Click to Select** a Brawler to adjust their real-time **Skill Range Indicators (Cone, Line, Circle)** in the right sidebar Tactics Console!
               </div>
             </div>
 
           </div>
 
-          {/* Right Column: Dynamic Draggable Brawlers Armory */}
-          <Card variant="premium" className="lg:col-span-3 border border-white/5 bg-dark-card p-5 space-y-4 flex flex-col h-[630px]">
-            <h2 className="text-sm font-heading font-black text-white uppercase tracking-widest border-b border-white/5 pb-2">
-              Spawn Brawlers
-            </h2>
-
-            {/* Sidebar search input */}
-            <div className="relative shrink-0">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
-                <SearchIcon size={14} />
-              </span>
-              <Input
-                placeholder="Find brawler..."
-                value={brawlerSearch}
-                onChange={(e) => setBrawlerSearch(e.target.value)}
-                className="pl-8 text-xs py-1 w-full bg-black/40 border-white/5"
-              />
-              {brawlerSearch && (
-                <button
-                  onClick={() => setBrawlerSearch("")}
-                  className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-500 hover:text-white"
-                >
-                  <CloseIcon size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Sidebar Rarity Filtering buttons */}
-            <div className="flex gap-1 overflow-x-auto shrink-0 pb-1.5 max-w-full">
-              <button
-                onClick={() => setBrawlerRarity(null)}
-                className={`cursor-pointer text-[8px] font-heading font-black uppercase px-2 py-0.5 rounded ${
-                  brawlerRarity === null ? "bg-brawl-yellow text-black" : "bg-white/5 text-gray-400"
-                }`}
-              >
-                All
-              </button>
-              {uniqueRarities.map((rarity) => (
-                <button
-                  key={rarity}
-                  onClick={() => setBrawlerRarity(brawlerRarity === rarity ? null : rarity)}
-                  className={`cursor-pointer text-[8px] font-heading font-black uppercase px-2 py-0.5 rounded truncate ${
-                    brawlerRarity === rarity ? "bg-brawl-purple text-white" : "bg-white/5 text-gray-400"
-                  }`}
-                >
-                  {rarity}
-                </button>
-              ))}
-            </div>
-
-            {/* Brawlers spawn list */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1.5 custom-scrollbar">
-              {filteredBrawlers.length === 0 ? (
-                <div className="text-center py-10 text-xs text-gray-600 italic">
-                  No matching brawlers found
-                </div>
-              ) : (
-                filteredBrawlers.map((brawler) => (
-                  <div
-                    key={brawler.id}
-                    onClick={() => placeBrawler(brawler)}
-                    className="flex items-center justify-between p-2 rounded-xl bg-black/30 border border-white/5 hover:border-brawl-yellow/30 hover:bg-black/50 transition-all duration-200 cursor-pointer group select-none"
+          {/* Right Column: Dynamic Draggable Brawlers Armory OR Brawler Tactics Console */}
+          <Card variant="premium" className="lg:col-span-3 border border-white/5 bg-dark-card p-5 space-y-4 flex flex-col h-[630px] overflow-hidden">
+            {selectedMarker ? (
+              <div className="flex flex-col h-full space-y-4">
+                {/* Header controls */}
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  <button
+                    onClick={() => setSelectedMarkerId(null)}
+                    className="flex items-center gap-1 text-[10px] font-heading font-black uppercase text-gray-400 hover:text-white cursor-pointer"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div 
-                        className="h-8 w-8 rounded-lg overflow-hidden border p-0.5 shrink-0 bg-dark-surface"
-                        style={{ borderColor: brawler.rarity?.color || "rgba(255,255,255,0.1)" }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={brawler.imageUrl} alt="" className="h-full w-full object-contain" />
-                      </div>
-                      <div className="truncate max-w-[120px]">
-                        <span className="text-xs font-heading font-extrabold text-gray-200 group-hover:text-brawl-yellow uppercase truncate block leading-tight">
-                          {brawler.name}
-                        </span>
-                        <span 
-                          className="text-[8px] font-heading font-bold uppercase tracking-wider block"
-                          style={{ color: brawler.rarity?.color }}
-                        >
-                          {brawler.rarity?.name}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <span className="text-[9px] text-brawl-yellow font-extrabold uppercase bg-brawl-yellow/10 px-2 py-0.5 rounded group-hover:bg-brawl-yellow group-hover:text-black transition-colors shrink-0">
-                      Spawn +
+                    ← Spawners
+                  </button>
+                  <Badge variant="primary" className="bg-brawl-yellow/15 border-brawl-yellow text-brawl-yellow text-[9px] uppercase">
+                    Tactics Active
+                  </Badge>
+                </div>
+
+                {/* Selected Agent Header */}
+                <div className="flex items-center gap-3 bg-black/40 border border-white/5 p-3 rounded-2xl relative">
+                  <div 
+                    className="h-11 w-11 rounded-xl overflow-hidden border-2 p-0.5 shrink-0 bg-dark-surface shadow-md"
+                    style={{ borderColor: selectedMarker.brawler.rarity?.color || "rgba(255,255,255,0.1)" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedMarker.brawler.imageUrl} alt="" className="h-full w-full object-contain" />
+                  </div>
+                  <div className="truncate flex-1">
+                    <h3 className="text-xs font-heading font-black text-white uppercase tracking-wide truncate block leading-tight">
+                      {selectedMarker.brawler.name}
+                    </h3>
+                    <span 
+                      className="text-[8px] font-heading font-bold uppercase tracking-wider block"
+                      style={{ color: selectedMarker.brawler.rarity?.color }}
+                    >
+                      {selectedMarker.brawler.rarity?.name} — {selectedMarker.brawler.class?.name}
                     </span>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+
+                {/* Add Range Overlays */}
+                <div className="space-y-2 shrink-0">
+                  <span className="text-[9px] font-heading font-black text-gray-400 uppercase tracking-widest block">
+                    Show Skill Overlays (แสดงสกิล)
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => addSkillIndicator("attack", "Main Attack", "line", "#F7D33A")}
+                      className="cursor-pointer flex items-center justify-center gap-1.5 p-2 rounded-xl border border-brawl-yellow/10 bg-brawl-yellow/5 hover:bg-brawl-yellow/15 text-brawl-yellow font-heading font-black text-[9px] uppercase transition-all"
+                    >
+                      <span>⚔️</span>
+                      Attack
+                    </button>
+                    <button
+                      onClick={() => addSkillIndicator("super", "Super Skill", "cone", "#E74C3C")}
+                      className="cursor-pointer flex items-center justify-center gap-1.5 p-2 rounded-xl border border-brawl-red/10 bg-brawl-red/5 hover:bg-brawl-red/15 text-brawl-red font-heading font-black text-[9px] uppercase transition-all"
+                    >
+                      <span>💀</span>
+                      Super
+                    </button>
+                  </div>
+
+                  {/* Dynamic Gadgets Section */}
+                  {selectedMarker.brawler.gadgets && selectedMarker.brawler.gadgets.length > 0 && (
+                    <div className="space-y-1.5 pt-1 border-t border-white/5 mt-1">
+                      <span className="text-[8px] font-heading font-black text-gray-500 uppercase tracking-wider block">
+                        Gadget Range Overlays
+                      </span>
+                      <div className="flex flex-col gap-1.5">
+                        {selectedMarker.brawler.gadgets.map((gadget) => (
+                          <button
+                            key={gadget.id}
+                            onClick={() => addSkillIndicator("gadget", gadget.name, "circle", "#2ECC71")}
+                            className="cursor-pointer flex items-center gap-2 p-1.5 rounded-xl border border-emerald-500/10 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 font-heading font-bold text-[8px] text-left transition-all uppercase"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={gadget.imageUrl} alt="" className="h-5 w-5 object-contain rounded-lg shrink-0 border border-emerald-500/20 bg-dark-surface" />
+                            <span className="truncate flex-1">{gadget.name}</span>
+                            <span className="text-[7px] bg-emerald-500/20 px-1.5 py-0.5 rounded font-black text-emerald-300">ADD</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Config List */}
+                <div className="flex-1 overflow-y-auto space-y-3.5 pr-1.5 custom-scrollbar">
+                  <span className="text-[9px] font-heading font-black text-gray-400 uppercase tracking-widest block border-t border-white/5 pt-3">
+                    Config Ranges ({selectedMarker.skills?.length || 0})
+                  </span>
+
+                  {(!selectedMarker.skills || selectedMarker.skills.length === 0) ? (
+                    <div className="text-center py-8 text-[9px] text-gray-500 italic bg-black/10 border border-dashed border-white/5 rounded-xl px-2">
+                      No active skill lines on map.<br/>Click dynamic skills above to project area indicator lines!
+                    </div>
+                  ) : (
+                    selectedMarker.skills.map((skill) => (
+                      <div 
+                        key={skill.id}
+                        className="p-3 bg-black/40 border border-white/5 rounded-2xl space-y-3 hover:border-white/10 transition-all"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-heading font-black uppercase text-white truncate max-w-[125px]">
+                            {skill.name}
+                          </span>
+                          <button
+                            onClick={() => deleteSkillIndicator(skill.id)}
+                            className="text-[8px] text-brawl-red hover:underline font-heading font-bold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        {/* Shape select */}
+                        <div className="space-y-1">
+                          <span className="text-[7px] font-heading font-black text-gray-500 uppercase">Indicator Shape</span>
+                          <div className="grid grid-cols-3 gap-1">
+                            {(["circle", "cone", "line"] as const).map((sh) => (
+                              <button
+                                key={sh}
+                                onClick={() => updateSkillIndicator(skill.id, { shape: sh })}
+                                className={`cursor-pointer text-[7px] font-heading font-extrabold uppercase py-1 rounded border transition-all ${
+                                  skill.shape === sh 
+                                    ? "bg-white/10 border-white/20 text-white" 
+                                    : "bg-white/5 border-transparent text-gray-500 hover:text-white"
+                                }`}
+                              >
+                                {sh === "circle" ? "⭕ Cir" : sh === "cone" ? "📐 Cone" : "▭ Line"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Range slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[7px] font-heading font-black text-gray-500 uppercase">
+                            <span>Range Radius</span>
+                            <span className="text-white font-bold">{skill.range}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="3"
+                            max="50"
+                            value={skill.range}
+                            onChange={(e) => updateSkillIndicator(skill.id, { range: parseInt(e.target.value) })}
+                            className="w-full h-1 bg-black/40 rounded-lg appearance-none cursor-pointer accent-brawl-yellow"
+                          />
+                        </div>
+
+                        {/* Angle slider (not for circle) */}
+                        {skill.shape !== "circle" && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[7px] font-heading font-black text-gray-500 uppercase">
+                              <span>Aim Angle (Direction)</span>
+                              <span className="text-white font-bold">{skill.angle}°</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="360"
+                              value={skill.angle}
+                              onChange={(e) => updateSkillIndicator(skill.id, { angle: parseInt(e.target.value) })}
+                              className="w-full h-1 bg-black/40 rounded-lg appearance-none cursor-pointer accent-brawl-purple"
+                            />
+                          </div>
+                        )}
+
+                        {/* Width slider (for cone or line) */}
+                        {skill.shape !== "circle" && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[7px] font-heading font-black text-gray-500 uppercase">
+                              <span>{skill.shape === "cone" ? "Spread Width" : "Thickness"}</span>
+                              <span className="text-white font-bold">{skill.width}{skill.shape === "cone" ? "°" : "%"}</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={skill.shape === "cone" ? 10 : 2}
+                              max={skill.shape === "cone" ? 120 : 15}
+                              value={skill.width}
+                              onChange={(e) => updateSkillIndicator(skill.id, { width: parseInt(e.target.value) })}
+                              className="w-full h-1 bg-black/40 rounded-lg appearance-none cursor-pointer accent-brawl-blue"
+                            />
+                          </div>
+                        )}
+
+                        {/* Color select */}
+                        <div className="space-y-1">
+                          <span className="text-[7px] font-heading font-black text-gray-500 uppercase">Glow Color</span>
+                          <div className="flex gap-1.5 justify-between">
+                            {["#F7D33A", "#E74C3C", "#2ECC71", "#3498DB", "#9B59B6"].map((col) => (
+                              <button
+                                key={col}
+                                onClick={() => updateSkillIndicator(skill.id, { color: col })}
+                                className={`cursor-pointer h-4.5 w-4.5 rounded-full border transition-all ${
+                                  skill.color === col 
+                                    ? "ring-2 ring-white border-transparent scale-110" 
+                                    : "border-white/10"
+                                }`}
+                                style={{ backgroundColor: col }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Remove Marker button */}
+                <div className="pt-2 border-t border-white/5 shrink-0">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      removeMarker(selectedMarker.id);
+                      showToast(`Removed ${selectedMarker.brawler.name} marker from the field.`, "info");
+                    }} 
+                    className="w-full text-brawl-red border-brawl-red/20 hover:bg-brawl-red/10 text-[10px] py-1.5"
+                  >
+                    Delete Character Marker
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-sm font-heading font-black text-white uppercase tracking-widest border-b border-white/5 pb-2">
+                  Spawn Brawlers
+                </h2>
+
+                {/* Sidebar search input */}
+                <div className="relative shrink-0">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+                    <SearchIcon size={14} />
+                  </span>
+                  <Input
+                    placeholder="Find brawler..."
+                    value={brawlerSearch}
+                    onChange={(e) => setBrawlerSearch(e.target.value)}
+                    className="pl-8 text-xs py-1 w-full bg-black/40 border-white/5"
+                  />
+                  {brawlerSearch && (
+                    <button
+                      onClick={() => setBrawlerSearch("")}
+                      className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-500 hover:text-white"
+                    >
+                      <CloseIcon size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sidebar Rarity Filtering buttons */}
+                <div className="flex gap-1 overflow-x-auto shrink-0 pb-1.5 max-w-full">
+                  <button
+                    onClick={() => setBrawlerRarity(null)}
+                    className={`cursor-pointer text-[8px] font-heading font-black uppercase px-2 py-0.5 rounded ${
+                      brawlerRarity === null ? "bg-brawl-yellow text-black" : "bg-white/5 text-gray-400"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {uniqueRarities.map((rarity) => (
+                    <button
+                      key={rarity}
+                      onClick={() => setBrawlerRarity(brawlerRarity === rarity ? null : rarity)}
+                      className={`cursor-pointer text-[8px] font-heading font-black uppercase px-2 py-0.5 rounded truncate ${
+                        brawlerRarity === rarity ? "bg-brawl-purple text-white" : "bg-white/5 text-gray-400"
+                      }`}
+                    >
+                      {rarity}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Brawlers spawn list */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1.5 custom-scrollbar">
+                  {filteredBrawlers.length === 0 ? (
+                    <div className="text-center py-10 text-xs text-gray-600 italic">
+                      No matching brawlers found
+                    </div>
+                  ) : (
+                    filteredBrawlers.map((brawler) => (
+                      <div
+                        key={brawler.id}
+                        onClick={() => placeBrawler(brawler)}
+                        className="flex items-center justify-between p-2 rounded-xl bg-black/30 border border-white/5 hover:border-brawl-yellow/30 hover:bg-black/50 transition-all duration-200 cursor-pointer group select-none"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div 
+                            className="h-8 w-8 rounded-lg overflow-hidden border p-0.5 shrink-0 bg-dark-surface"
+                            style={{ borderColor: brawler.rarity?.color || "rgba(255,255,255,0.1)" }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={brawler.imageUrl} alt="" className="h-full w-full object-contain" />
+                          </div>
+                          <div className="truncate max-w-[120px]">
+                            <span className="text-xs font-heading font-extrabold text-gray-200 group-hover:text-brawl-yellow uppercase truncate block leading-tight">
+                              {brawler.name}
+                            </span>
+                            <span 
+                              className="text-[8px] font-heading font-bold uppercase tracking-wider block"
+                              style={{ color: brawler.rarity?.color }}
+                            >
+                              {brawler.rarity?.name}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <span className="text-[9px] text-brawl-yellow font-extrabold uppercase bg-brawl-yellow/10 px-2 py-0.5 rounded group-hover:bg-brawl-yellow group-hover:text-black transition-colors shrink-0">
+                          Spawn +
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </Card>
         </div>
 
