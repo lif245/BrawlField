@@ -72,6 +72,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
   const [markers, setMarkers] = useState<BrawlerMarker[]>([]);
   const [activeDragMarkerId, setActiveDragMarkerId] = useState<string | null>(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [activeDragHandle, setActiveDragHandle] = useState<{ markerId: string; skillId: string } | null>(null);
 
   // Sidebar brawler filter state
   const [brawlerSearch, setBrawlerSearch] = useState("");
@@ -404,6 +405,68 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     };
   }, [activeDragMarkerId]);
 
+  // Dragging Aim Handles within board logic
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!activeDragHandle || !boardRef.current || !canvasRef.current) return;
+      const canvas = canvasRef.current;
+      const rect = boardRef.current.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      const marker = markers.find((m) => m.id === activeDragHandle.markerId);
+      if (!marker || !marker.skills) return;
+
+      const cx = (marker.x / 100) * canvas.width;
+      const cy = (marker.y / 100) * canvas.height;
+
+      const dx = mx - cx;
+      const dy = my - cy;
+
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      let range = Math.max(3, Math.min(50, (distance / Math.min(canvas.width, canvas.height)) * 100));
+
+      let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+
+      setMarkers((prev) =>
+        prev.map((m) => {
+          if (m.id === activeDragHandle.markerId) {
+            return {
+              ...m,
+              skills: (m.skills || []).map((s) => {
+                if (s.id === activeDragHandle.skillId) {
+                  if (s.shape === "circle") {
+                    return { ...s, range: parseFloat(range.toFixed(2)) };
+                  }
+                  return { ...s, range: parseFloat(range.toFixed(2)), angle: parseFloat(angle.toFixed(1)) };
+                }
+                return s;
+              })
+            };
+          }
+          return m;
+        })
+      );
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (activeDragHandle) {
+        setActiveDragHandle(null);
+      }
+    };
+
+    if (activeDragHandle) {
+      window.addEventListener("mousemove", handleGlobalMouseMove);
+      window.addEventListener("mouseup", handleGlobalMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, [activeDragHandle, markers]);
+
   // Place Brawler on the board
   const placeBrawler = (brawler: Brawler) => {
     const markerId = `marker-${Date.now()}-${Math.random()}`;
@@ -635,8 +698,8 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
         {/* Main Work Area Split Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           
-          {/* Left Column: Tactics Tools Dashboard */}
-          <Card variant="premium" className="lg:col-span-3 border border-white/5 bg-dark-card p-5 space-y-6">
+          {/* Left Column: Tactics Tools Dashboard (lg:col-span-2 - more compact to enlarge map!) */}
+          <Card variant="premium" className="lg:col-span-2 border border-white/5 bg-dark-card p-5 space-y-6">
             <div className="space-y-4">
               <h2 className="text-sm font-heading font-black text-white uppercase tracking-widest border-b border-white/5 pb-2">
                 Combat Drawing Tools
@@ -759,13 +822,14 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
             </div>
           </Card>
 
-          {/* Center Column: Interactive Canvas Map Board */}
-          <div className="lg:col-span-6 flex flex-col items-center justify-center">
+          {/* Center Column: Interactive Canvas Map Board (lg:col-span-7 - much wider!) */}
+          <div className="lg:col-span-7 flex flex-col items-center justify-center">
             
-            {/* The Strategy board wrapper container */}
+            {/* The Strategy board wrapper container (Perfect vertical Brawl map aspect ratio 21/33!) */}
             <div 
               ref={boardRef}
-              className="relative w-full max-w-[500px] aspect-[4/5] bg-black/60 rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] select-none"
+              className="relative w-full max-w-[620px] bg-black/60 rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] select-none"
+              style={{ aspectRatio: "21/33" }}
             >
               {/* Back Map Blueprint Layer */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -850,9 +914,60 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                 })}
               </div>
 
+              {/* Aim Handles for Selected Brawler Skills */}
+              <div className="absolute inset-0 z-30 pointer-events-none">
+                {selectedMarker && selectedMarker.skills && selectedMarker.skills.map((skill) => {
+                  const rad = (skill.angle * Math.PI) / 180;
+                  const canvas = canvasRef.current;
+                  if (!canvas) return null;
+                  
+                  const cx = (selectedMarker.x / 100) * canvas.width;
+                  const cy = (selectedMarker.y / 100) * canvas.height;
+                  const r = (skill.range / 100) * Math.min(canvas.width, canvas.height);
+                  
+                  let hx = cx;
+                  let hy = cy;
+                  
+                  if (skill.shape === "circle") {
+                    hx = cx + r;
+                    hy = cy;
+                  } else {
+                    hx = cx + r * Math.cos(rad);
+                    hy = cy + r * Math.sin(rad);
+                  }
+                  
+                  const hxPct = (hx / canvas.width) * 100;
+                  const hyPct = (hy / canvas.height) * 100;
+                  
+                  return (
+                    <div
+                      key={`handle-${skill.id}`}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (e.button === 0) {
+                          setActiveDragHandle({ markerId: selectedMarker.id, skillId: skill.id });
+                        }
+                      }}
+                      className="absolute pointer-events-auto h-6 w-6 rounded-full cursor-grab active:cursor-grabbing hover:scale-125 active:scale-95 border-2 flex items-center justify-center transition-all bg-dark-surface shadow-lg group"
+                      style={{
+                        left: `${hxPct}%`,
+                        top: `${hyPct}%`,
+                        transform: "translate(-50%, -50%)",
+                        borderColor: skill.color,
+                        boxShadow: `0 0 15px ${skill.color}, 0 4px 12px rgba(0,0,0,0.6)`
+                      }}
+                      title={`Drag directly on map to rotate/aim/resize ${skill.name}!`}
+                    >
+                      <span className="text-[10px] select-none text-white pointer-events-none group-hover:scale-110">🎯</span>
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* Instructions float overlay */}
               <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none bg-black/75 border border-white/5 backdrop-blur-sm rounded-xl p-2.5 text-[9px] text-gray-400">
-                👉 <strong>Tactic Instructions:</strong> Click brawler avatars in roster to spawn. Click & Drag to move them. **Click to Select** a Brawler to adjust their real-time **Skill Range Indicators (Cone, Line, Circle)** in the right sidebar Tactics Console!
+                👉 <strong>Tactical Direct Controls:</strong> Click to spawn Brawlers. Drag characters to move. **Click Brawler** to highlight, then **Drag the 🎯 Aim Handle** directly on the map to orient, rotate, and resize skills!
               </div>
             </div>
 
