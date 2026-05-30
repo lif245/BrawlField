@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/icons";
 import type { BrawlMap } from "@/types/map";
 import type { Brawler } from "@/types/brawler";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 interface PlannerClientProps {
   map: BrawlMap;
@@ -73,6 +74,18 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
   const [activeDragMarkerId, setActiveDragMarkerId] = useState<string | null>(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [activeDragHandle, setActiveDragHandle] = useState<{ markerId: string; skillId: string } | null>(null);
+  const [isCollaborating, setIsCollaborating] = useState(false);
+  const channelRef = useRef<any>(null);
+
+  const broadcastEvent = (event: string, payload: any) => {
+    if (channelRef.current && isSupabaseConfigured) {
+      channelRef.current.send({
+        type: "broadcast",
+        event,
+        payload,
+      });
+    }
+  };
 
   // Sidebar brawler filter state
   const [brawlerSearch, setBrawlerSearch] = useState("");
@@ -132,6 +145,109 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
       }
     }
   }, [map.id, brawlers]);
+
+  // Subscribe to real-time collaborative planning lobby using Supabase Realtime
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setIsCollaborating(false);
+      return;
+    }
+
+    const channelName = `bf-map-plan-${map.id}`;
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { self: false },
+      },
+    });
+
+    channelRef.current = channel;
+
+    // Listen to incoming realtime broadcast events
+    channel
+      .on("broadcast", { event: "draw-action" }, ({ payload }: { payload: any }) => {
+        setActions((prev) => [...prev, payload.action]);
+      })
+      .on("broadcast", { event: "marker-placed" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) => {
+          if (prev.some((m) => m.id === payload.marker.id)) return prev;
+          return [...prev, payload.marker];
+        });
+      })
+      .on("broadcast", { event: "marker-moved" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) =>
+          prev.map((m) => (m.id === payload.id ? { ...m, x: payload.x, y: payload.y } : m))
+        );
+      })
+      .on("broadcast", { event: "marker-removed" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) => prev.filter((m) => m.id !== payload.id));
+        setSelectedMarkerId((prev) => (prev === payload.id ? null : prev));
+      })
+      .on("broadcast", { event: "skill-updated" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) =>
+          prev.map((m) => {
+            if (m.id === payload.markerId && m.skills) {
+              return {
+                ...m,
+                skills: m.skills.map((s) => {
+                  if (s.id === payload.skillId) {
+                    return { ...s, ...payload.updates };
+                  }
+                  return s;
+                })
+              };
+            }
+            return m;
+          })
+        );
+      })
+      .on("broadcast", { event: "skill-added" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) =>
+          prev.map((m) => {
+            if (m.id === payload.markerId) {
+              return {
+                ...m,
+                skills: [...(m.skills || []), payload.skill]
+              };
+            }
+            return m;
+          })
+        );
+      })
+      .on("broadcast", { event: "skill-removed" }, ({ payload }: { payload: any }) => {
+        setMarkers((prev) =>
+          prev.map((m) => {
+            if (m.id === payload.markerId && m.skills) {
+              return {
+                ...m,
+                skills: m.skills.filter((s) => s.id !== payload.skillId)
+              };
+            }
+            return m;
+          })
+        );
+      })
+      .on("broadcast", { event: "board-clear" }, () => {
+        setActions([]);
+        setRedoStack([]);
+        setMarkers([]);
+        setSelectedMarkerId(null);
+      });
+
+    channel.subscribe((status: string) => {
+      if (status === "SUBSCRIBED") {
+        setIsCollaborating(true);
+      } else {
+        setIsCollaborating(false);
+      }
+    });
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [map.id]);
 
   // Adjust canvas pixel density on resize and redraw
   const adjustCanvasSize = () => {
@@ -338,7 +454,9 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
 
     if (currentAction.current && currentAction.current.points.length > 0) {
       // Save drawn action to history
-      setActions((prev) => [...prev, currentAction.current as DrawAction]);
+      const newAction = currentAction.current;
+      setActions((prev) => [...prev, newAction]);
+      broadcastEvent("draw-action", { action: newAction });
     }
     currentAction.current = null;
   };
@@ -415,6 +533,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     if (window.confirm("Clear all drawing lines on the canvas?")) {
       setActions([]);
       setRedoStack([]);
+      broadcastEvent("board-clear", {});
     }
   };
 
@@ -425,6 +544,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
       setMarkers([]);
       setSelectedMarkerId(null);
       localStorage.removeItem(`bf-strategy-${map.id}`);
+      broadcastEvent("board-clear", {});
       showToast("Strategy board reset", "info");
     }
   };
@@ -437,7 +557,30 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
       const xPct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
       const yPct = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
       setMarkers((prev) =>
-        prev.map((m) => (m.id === activeDragMarkerId ? { ...m, x: xPct, y: yPct } : m))
+        prev.map((m) => {
+          if (m.id === activeDragMarkerId) {
+            broadcastEvent("marker-moved", { id: m.id, x: xPct, y: yPct });
+            return { ...m, x: xPct, y: yPct };
+          }
+          return m;
+        })
+      );
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!activeDragMarkerId || !boardRef.current || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const rect = boardRef.current.getBoundingClientRect();
+      const xPct = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
+      const yPct = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+      setMarkers((prev) =>
+        prev.map((m) => {
+          if (m.id === activeDragMarkerId) {
+            broadcastEvent("marker-moved", { id: m.id, x: xPct, y: yPct });
+            return { ...m, x: xPct, y: yPct };
+          }
+          return m;
+        })
       );
     };
 
@@ -450,11 +593,15 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     if (activeDragMarkerId) {
       window.addEventListener("mousemove", handleGlobalMouseMove);
       window.addEventListener("mouseup", handleGlobalMouseUp);
+      window.addEventListener("touchmove", handleGlobalTouchMove, { passive: false });
+      window.addEventListener("touchend", handleGlobalMouseUp);
     }
 
     return () => {
       window.removeEventListener("mousemove", handleGlobalMouseMove);
       window.removeEventListener("mouseup", handleGlobalMouseUp);
+      window.removeEventListener("touchmove", handleGlobalTouchMove);
+      window.removeEventListener("touchend", handleGlobalMouseUp);
     };
   }, [activeDragMarkerId]);
 
@@ -489,10 +636,52 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
               ...m,
               skills: (m.skills || []).map((s) => {
                 if (s.id === activeDragHandle.skillId) {
-                  if (s.shape === "circle") {
-                    return { ...s, range: parseFloat(range.toFixed(2)) };
-                  }
-                  return { ...s, range: parseFloat(range.toFixed(2)), angle: parseFloat(angle.toFixed(1)) };
+                  const updates = s.shape === "circle" ? { range: parseFloat(range.toFixed(2)) } : { range: parseFloat(range.toFixed(2)), angle: parseFloat(angle.toFixed(1)) };
+                  broadcastEvent("skill-updated", { markerId: m.id, skillId: s.id, updates });
+                  return { ...s, ...updates };
+                }
+                return s;
+              })
+            };
+          }
+          return m;
+        })
+      );
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!activeDragHandle || !boardRef.current || !canvasRef.current || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const canvas = canvasRef.current;
+      const rect = boardRef.current.getBoundingClientRect();
+      const mx = touch.clientX - rect.left;
+      const my = touch.clientY - rect.top;
+
+      const marker = markers.find((m) => m.id === activeDragHandle.markerId);
+      if (!marker || !marker.skills) return;
+
+      const cx = (marker.x / 100) * canvas.width;
+      const cy = (marker.y / 100) * canvas.height;
+
+      const dx = mx - cx;
+      const dy = my - cy;
+
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      let range = Math.max(3, Math.min(50, (distance / Math.min(canvas.width, canvas.height)) * 100));
+
+      let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+
+      setMarkers((prev) =>
+        prev.map((m) => {
+          if (m.id === activeDragHandle.markerId) {
+            return {
+              ...m,
+              skills: (m.skills || []).map((s) => {
+                if (s.id === activeDragHandle.skillId) {
+                  const updates = s.shape === "circle" ? { range: parseFloat(range.toFixed(2)) } : { range: parseFloat(range.toFixed(2)), angle: parseFloat(angle.toFixed(1)) };
+                  broadcastEvent("skill-updated", { markerId: m.id, skillId: s.id, updates });
+                  return { ...s, ...updates };
                 }
                 return s;
               })
@@ -512,11 +701,15 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     if (activeDragHandle) {
       window.addEventListener("mousemove", handleGlobalMouseMove);
       window.addEventListener("mouseup", handleGlobalMouseUp);
+      window.addEventListener("touchmove", handleGlobalTouchMove, { passive: false });
+      window.addEventListener("touchend", handleGlobalMouseUp);
     }
 
     return () => {
       window.removeEventListener("mousemove", handleGlobalMouseMove);
       window.removeEventListener("mouseup", handleGlobalMouseUp);
+      window.removeEventListener("touchmove", handleGlobalTouchMove);
+      window.removeEventListener("touchend", handleGlobalMouseUp);
     };
   }, [activeDragHandle, markers]);
 
@@ -533,15 +726,15 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     };
     setMarkers((prev) => [...prev, newMarker]);
     setSelectedMarkerId(markerId); // Spawn opens control dashboard immediately
+    broadcastEvent("marker-placed", { marker: newMarker });
     showToast(`Placed ${brawler.name} on the map. Drag them to position!`, "success");
   };
 
   // Remove placed Brawler
   const removeMarker = (id: string) => {
     setMarkers((prev) => prev.filter((m) => m.id !== id));
-    if (selectedMarkerId === id) {
-      setSelectedMarkerId(null);
-    }
+    setSelectedMarkerId((prev) => (prev === id ? null : prev));
+    broadcastEvent("marker-removed", { id });
   };
 
   // Add a range indicator to the selected brawler marker
@@ -567,6 +760,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     setMarkers((prev) =>
       prev.map((m) => {
         if (m.id === selectedMarkerId) {
+          broadcastEvent("skill-added", { markerId: selectedMarkerId, skill: newIndicator });
           return {
             ...m,
             skills: [...(m.skills || []), newIndicator],
@@ -584,6 +778,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     setMarkers((prev) =>
       prev.map((m) => {
         if (m.id === selectedMarkerId) {
+          broadcastEvent("skill-removed", { markerId: selectedMarkerId, skillId });
           return {
             ...m,
             skills: (m.skills || []).filter((s) => s.id !== skillId),
@@ -601,6 +796,7 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
     setMarkers((prev) =>
       prev.map((m) => {
         if (m.id === selectedMarkerId) {
+          broadcastEvent("skill-updated", { markerId: selectedMarkerId, skillId, updates });
           return {
             ...m,
             skills: (m.skills || []).map((s) => (s.id === skillId ? { ...s, ...updates } : s)),
@@ -727,6 +923,15 @@ export default function PlannerClient({ map, brawlers }: PlannerClientProps) {
                 >
                   {map.gameMode?.name}
                 </Badge>
+                {isCollaborating ? (
+                  <Badge className="bg-emerald-500/10 border-emerald-500 text-emerald-400 font-extrabold text-[10px] animate-pulse">
+                    🟢 COLLAB LIVE
+                  </Badge>
+                ) : (
+                  <Badge className="bg-white/5 border-white/10 text-gray-400 font-bold text-[10px]" title="Connect Supabase credentials to unlock real-time drawing!">
+                    👤 SOLO SANDBOX
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-gray-400">
                 Esports Map Combat Planner — design path drafts and character drops.
